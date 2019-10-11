@@ -7,26 +7,44 @@ public class Game {
     private final static int FINAL_ROUND = 10;
     private int current_round;
     private ArrayList<Player> players;
-    private CardStock cardStock;
-    private Map<Player, Card> playingField;
+    Player beginning_player;
+    Player[] player_order; // this array holds the correct order of players turns
+    int player_begin_index; // this index holds the index of the next player who's turn it is
+    private CardStock cardStock; // holds all cards that exist in this game
+    private Map<Player, Card> playingField; // holds all cards currently put on field by all players
     Scanner reader = new Scanner(System.in);  // Reading from System.in
 
 
     Game() {
         players = new ArrayList<>();
         current_round = 1;
+        player_begin_index = -1;
     }
 
     public void run() {
         System.out.println("Welcome to Skull King!\nHow much players?[2-6]?");
         int player_size = reader.nextInt();
+        player_order = new Player[player_size];
         for (int i = 0; i < player_size; ++i) {
             System.out.println("What's the name of player " + (i + 1) + "?");
             String player_name = reader.next();
-            players.add(new Player(player_name));
+            Player player = new Player((player_name));
+            players.add(player);
+            player_order[i] = player;
         }
+        // set player 1 as the beginning player on start of each game
+        beginning_player = player_order[0];
 
         while (current_round <= FINAL_ROUND) {
+            // at each round, the next player begins
+            if (player_begin_index < player_order.length - 1) {
+                player_begin_index++;
+            } else {
+                player_begin_index = 0;
+            }
+            beginning_player = player_order[player_begin_index];
+            GameLogic.sortPlayerList(players, beginning_player);
+            System.out.println(beginning_player + " begins!");
             startNextRound();
             current_round++;
         }
@@ -36,7 +54,9 @@ public class Game {
     }
 
     public void startNextRound() {
+        System.out.println("------------------");
         System.out.println("Round " + current_round + " starting!");
+        System.out.println("------------------");
         playingField = new LinkedHashMap<>();
         cardStock = new CardStock();
         // give each player as much cards as the round number is
@@ -47,10 +67,12 @@ public class Game {
                 --card_amount;
             }
         }
+        GameLogic.sortPlayerList(players, beginning_player);
 
-        // ask for the bet of every player
+        // reset every player and ask for their bet
         for (Player player : players) {
             System.out.println(player + "'s turn!");
+            player.reset();
             player.showDeck();
             player.askForBet();
         }
@@ -68,9 +90,10 @@ public class Game {
             checkForRoundWin();
             --cards_left;
         }
+        // once all cards are gone, update all the player's points
+        GameLogic.updatePlayerPoints(current_round, players);
 
-
-        // displayRoundResults();
+        displayRoundResults();
 
 
     }
@@ -87,11 +110,21 @@ public class Game {
 
     void checkForRoundWin() {
         Map.Entry highest_pair = GameLogic.getHighestRankedPair(playingField);
-        System.out.println(highest_pair.getKey() + " won the round!");
+        Player round_winning_player = (Player) highest_pair.getKey();
+        System.out.println(round_winning_player + " won the round!");
+        round_winning_player.addTrick();
+        beginning_player = round_winning_player;
     }
 
     void displayRoundResults() {
-
+        System.out.println("--------------------");
+        System.out.println("Round results:");
+        System.out.println("--------------------");
+        for (Player player : players) {
+            System.out.println(player + ": " + player.getPoints()
+                    + " Points (" + (player.getLastPointChange() >= 0 ? "+" : "")
+                    + player.getLastPointChange() + ")");
+        }
     }
 
     private class CardStock {

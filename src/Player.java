@@ -1,4 +1,6 @@
 import cards.Card;
+import cards.EscapeCard;
+import cards.PirateCard;
 
 import java.util.ArrayList;
 import java.util.Scanner;
@@ -6,13 +8,11 @@ import java.util.Scanner;
 public class Player {
     Scanner reader = new Scanner(System.in);  // Reading from System.in
     private ArrayList<Card> deck;
-    private boolean hasFinishedTurn;
     private String name;
-    private int bet;
+    private int bet, tricks, points, possible_extra_points, last_point_change;
 
     Player(String name) {
         deck = new ArrayList<>();
-        hasFinishedTurn = false;
         this.name = name;
     }
 
@@ -35,7 +35,7 @@ public class Player {
         setBet(bet_input);
     }
 
-    Card askForCard(){
+    Card askForCard() {
         System.out.print("Choose a card ");
         if (deck.size() == 1) {
             System.out.print("[1]");
@@ -50,14 +50,59 @@ public class Player {
         this.bet = bet;
     }
 
+    int getBet() {
+        return bet;
+    }
+
+    void reset() {
+        tricks = 0;
+        possible_extra_points = 0;
+    }
+
     Card playCard(int card_index) {
         Card card = deck.get(card_index);
+        // handle the scary mary special case
+        if (card.type().equals("ScaryMary")) {
+            System.out.println("DECIDE: ScaryMary as Escape [0] or Pirate [1]?");
+            int card_input = reader.nextInt();
+            switch (card_input) {
+                case 0: // scary mary is escape card
+                    return new EscapeCard();
+                case 1: // scary mary is pirate
+                    return new PirateCard();
+            }
+        }
         deck.remove(card_index);
         return card;
     }
 
-    boolean hasCards(){
-        return deck.size() != 0;
+    void addTrick() {
+        ++tricks;
+    }
+
+    int getTricks() {
+        return tricks;
+    }
+
+    void addPossibleExtraPoints(int possible_extra_points) {
+        this.possible_extra_points = possible_extra_points;
+    }
+
+    int getPossibleExtraPoints() {
+        return possible_extra_points;
+    }
+
+    void updatePoints(int amount) {
+        points += amount;
+        last_point_change = amount;
+    }
+
+    int getPoints() {
+        return points;
+    }
+
+    int getLastPointChange() {
+        return last_point_change;
     }
 
     @Override
