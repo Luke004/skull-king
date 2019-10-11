@@ -1,5 +1,6 @@
 import cards.Card;
 import cards.EscapeCard;
+import cards.NumberCard;
 import cards.PirateCard;
 
 import java.util.ArrayList;
@@ -27,6 +28,14 @@ public class Player {
             if (i != deck.size() - 1) System.out.print(" ");
             else System.out.println();
         }
+    }
+
+    boolean hasColorCard(NumberCard colorCard) {
+        for (Card card : deck) {
+            if (!(card instanceof NumberCard)) continue;
+            if (((NumberCard) card).getColor().equals(colorCard.getColor())) return true;
+        }
+        return false;
     }
 
     void askForBet() {
@@ -61,6 +70,7 @@ public class Player {
 
     Card playCard(int card_index) {
         Card card = deck.get(card_index);
+        deck.remove(card_index);
         // handle the scary mary special case
         if (card.type().equals("ScaryMary")) {
             System.out.println("DECIDE: ScaryMary as Escape [0] or Pirate [1]?");
@@ -72,7 +82,6 @@ public class Player {
                     return new PirateCard();
             }
         }
-        deck.remove(card_index);
         return card;
     }
 

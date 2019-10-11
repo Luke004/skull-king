@@ -5,9 +5,9 @@ import java.util.*;
 
 public class GameLogic {
 
-    static final int POINTS_PER_TRICK = 20;
-    static final int POINTS_PER_ROUND_FOR_ZERO_BET = 10;
-    static final int LOSS_PER_FALSE_BET = 10;
+    private static final int POINTS_PER_TRICK = 20;
+    private static final int POINTS_PER_ROUND_FOR_ZERO_BET = 10;
+    private static final int LOSS_PER_FALSE_BET = 10;
 
     static Map.Entry getHighestRankedPair(Map<Player, Card> playingField) {
         if (playingField.size() == 1) return playingField.entrySet().iterator().next();
@@ -111,22 +111,28 @@ public class GameLogic {
         return highest_pair;
     }
 
-    static boolean isCardAllowed(Card chosen_card, Map<Player, Card> playingField) {
-        // TODO
-        /*
-        Card color_to_confess = null;
+    static boolean isCardAllowed(Player player, Card chosen_card, Map<Player, Card> playingField) {
+        if (!chosen_card.type().equals("Number")) return true;
 
-        Iterator<Map.Entry<Player, Card>> iterator = playingField.entrySet().iterator();
-
-        while (iterator.hasNext()) {
-            Map.Entry next_card = iterator.next();
-            Card highest_card = ((Card) highest_pair.getValue());
+        for (Map.Entry<Player, Card> next_entry : playingField.entrySet()) {
+            Card next_card = next_entry.getValue();
+            // look for the first card that is a 'NumberCard'
+            if (next_card instanceof NumberCard) {
+                NumberCard color_to_confess = (NumberCard) next_card;
+                if (!color_to_confess.getColor().equals(((NumberCard) chosen_card).getColor())) {
+                    // player did not play the color he had to confess
+                    // look if he has the color he has to confess on his deck
+                    // if he has it, the card he played is not allowed
+                    if (player.hasColorCard(color_to_confess)) {
+                        System.out.println("ILLEGAL CARD: [" + chosen_card + "]! Please confess color "
+                                + color_to_confess.getColor() + "!");
+                        return false;
+                    } else return true;
+                }
+                break;
+            }
         }
-        */
-
-
-
-        return false;
+        return true;
     }
 
     static void updatePlayerPoints(int round, ArrayList<Player> players) {

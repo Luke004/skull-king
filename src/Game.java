@@ -17,6 +17,8 @@ public class Game {
 
     Game() {
         players = new ArrayList<>();
+        cardStock = new CardStock();
+        playingField = new LinkedHashMap<>();
         current_round = 1;
         player_begin_index = -1;
     }
@@ -26,7 +28,7 @@ public class Game {
         int player_size = reader.nextInt();
         player_order = new Player[player_size];
         for (int i = 0; i < player_size; ++i) {
-            System.out.println("What's the name of player " + (i + 1) + "?");
+            System.out.println("What's the name of Player " + (i + 1) + "?");
             String player_name = reader.next();
             Player player = new Player((player_name));
             players.add(player);
@@ -57,8 +59,7 @@ public class Game {
         System.out.println("------------------");
         System.out.println("Round " + current_round + " starting!");
         System.out.println("------------------");
-        playingField = new LinkedHashMap<>();
-        cardStock = new CardStock();
+        cardStock.createNewCardStock();
         // give each player as much cards as the round number is
         for (Player player : players) {
             int card_amount = current_round;
@@ -80,10 +81,16 @@ public class Game {
         // let every player play a card as long as there are cards left
         int cards_left = current_round;
         while (cards_left > 0) {
+            playingField.clear();
             for (Player player : players) {
                 System.out.println(player + "'s turn!");
                 player.showDeck();
                 Card card = player.askForCard();
+                while (!GameLogic.isCardAllowed(player, card, playingField)) {
+                    player.giveCard(card);
+                    player.showDeck();
+                    card = player.askForCard();
+                }
                 playingField.put(player, card);
             }
             printPlayingField();
@@ -94,8 +101,6 @@ public class Game {
         GameLogic.updatePlayerPoints(current_round, players);
 
         displayRoundResults();
-
-
     }
 
     void printPlayingField() {
@@ -118,50 +123,80 @@ public class Game {
 
     void displayRoundResults() {
         System.out.println("--------------------");
-        System.out.println("Round results:");
+        System.out.println((current_round == 10 ? "End" : "Round") + " results:");
         System.out.println("--------------------");
         for (Player player : players) {
             System.out.println(player + ": " + player.getPoints()
                     + " Points (" + (player.getLastPointChange() >= 0 ? "+" : "")
                     + player.getLastPointChange() + ")");
         }
+        if (current_round == 10) {
+            Iterator it = players.iterator();
+            ArrayList<Player> winning_players = new ArrayList<>();
+            winning_players.add((Player) it.next());
+
+            while (it.hasNext()) {
+                Player next_player = (Player) it.next();
+                if (next_player.getPoints() > winning_players.get(0).getPoints()) {
+                    winning_players.clear();
+                    winning_players.add(next_player);
+                } else if (next_player.getPoints() == winning_players.get(0).getPoints()) {
+                    winning_players.add(next_player);
+                }
+            }
+
+            switch (winning_players.size()) {
+                case 1: // just one winner
+                    System.out.println(winning_players.get(0) + " won!");
+                    break;
+                default: // multiple winners (same amount of points)
+                    System.out.println("Multiple wins!");
+                    for (int i = 0; i < winning_players.size(); ++i) {
+                        System.out.print(winning_players.get(i)
+                                + (i == winning_players.size() - 1 ? " have won!" : " and "));
+                    }
+            }
+        }
     }
 
     private class CardStock {
-        private ArrayList<Card> game_cards;
+        private ArrayList<Card> game_cards, game_cards_deepcopy;
 
         CardStock() {
-            game_cards = new ArrayList<>();
+            game_cards_deepcopy = new ArrayList<>();
 
             // 5 Pirates
             for (int i = 0; i < 5; ++i)
-                game_cards.add(new PirateCard());
+                game_cards_deepcopy.add(new PirateCard());
 
             // 5 Escapes
             for (int i = 0; i < 5; ++i)
-                game_cards.add(new EscapeCard());
+                game_cards_deepcopy.add(new EscapeCard());
 
             // 2 Mermaids
             for (int i = 0; i < 2; ++i)
-                game_cards.add(new MermaidCard());
+                game_cards_deepcopy.add(new MermaidCard());
 
             // 1 ScaryMary
-            game_cards.add(new ScaryMaryCard());
+            game_cards_deepcopy.add(new ScaryMaryCard());
 
             // 1 SkullKing
-            game_cards.add(new SkullKingCard());
+            game_cards_deepcopy.add(new SkullKingCard());
 
             // Colored Cards
             CardColor[] cardColors = {CardColor.BLUE, CardColor.RED, CardColor.YELLOW, CardColor.BLACK};
             for (CardColor cardColor : cardColors) {
                 int card_number = NumberCard.MIN_CARD_VALUE;
                 while (card_number <= NumberCard.MAX_CARD_VALUE) {
-                    game_cards.add(new NumberCard(cardColor, card_number));
+                    game_cards_deepcopy.add(new NumberCard(cardColor, card_number));
                     ++card_number;
                 }
             }
         }
 
+        void createNewCardStock() {
+            game_cards = new ArrayList<>(game_cards_deepcopy);
+        }
 
         Card takeCard() {
             int min_index = 0;
