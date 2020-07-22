@@ -1,0 +1,668 @@
+<div id="signDiv">
+    Enter your name: <input id="signDiv-username" type="text"></input><br>
+    <button id="signDiv-startBtn">Start</button>
+</div>
+
+<div id="lobbyDiv" style="display:none;">
+    <p style="margin-bottom: 30px;">Join a lobby to play the game!</p>
+    <button id="lobby1_btn" class="lobby_buttons" style="width: 100px; height: 50px;">Join lobby 1</button>
+    <p style="font-size: 10px;">Players in lobby: <span id="lobby1_players"></span></p>
+    <button id="lobby2_btn" class="lobby_buttons" style="width: 100px; height: 50px;">Join lobby 2</button>
+    <p style="font-size: 10px; margin-bottom: 50px;">Players in lobby: <span id="lobby2_players"></span></p>
+
+    <div id="chat-text_global" style="width:500px;height:100px;overflow-y:scroll">
+        <div><i>Welcome to global chat!</i><br></div>
+    </div>
+
+    <form id="chat-form_global">
+        <input id="chat-input_global" type="text" style="width:500px" autocomplete="off"></input>
+    </form>
+</div>
+
+<div id="gameDiv" style="display:none;">
+    <canvas id="ctx" width="800" height="600" style="border:1px solid #000000;"></canvas>
+
+    <div id="chat-text_game" style="width:500px;height:100px;overflow-y:scroll">
+        <div><i>Welcome to game chat!</i><br></div>
+    </div>
+
+    <form id="chat-form_game">
+        <input id="chat-input_game" type="text" style="width:500px" autocomplete="off"></input>
+    </form>
+</div>
+
+<script src="/client/socket.js"></script>
+<script src="/client/Player.js"></script>
+<script>
+    var canvas = document.getElementById("ctx");
+    var ctx = document.getElementById("ctx").getContext("2d");
+    ctx.font = '30px Arial';
+    const CANVAS_HEIGHT = 600;
+    const CANVAS_WIDTH = 800;
+    const CARD_WIDTH = 50;
+    const CARD_HEIGHT = 80;
+    const CARD_MARGIN = 20;
+    const TRICK_CHOOSE_ARC_RADIUS = 20;
+
+    var game_starting_time_interval = null;
+
+    // game divs
+    var signDiv = document.getElementById('signDiv');
+    var lobbyDiv = document.getElementById('lobbyDiv');
+    var gameDiv = document.getElementById('gameDiv');
+
+    // global chat
+    var chatText_global = document.getElementById('chat-text_global');
+    var chatInput_global = document.getElementById('chat-input_global');
+    var chatForm_global = document.getElementById('chat-form_global');
+
+    // game chat
+    var chatText_game = document.getElementById('chat-text_game');
+    var chatInput_game = document.getElementById('chat-input_game');
+    var chatForm_game = document.getElementById('chat-form_game');
+
+    var socket = io();
+
+    // ------------------------------------------------------------ LOGIN -------------------------------------------------------
+    var signDivUsername = document.getElementById('signDiv-username');
+    var signDiv_startBtn = document.getElementById('signDiv-startBtn');
+
+    signDivUsername.addEventListener("keyup", function (event) {
+        // enter key pressed
+        if (event.keyCode === 13) {
+            event.preventDefault();
+            // trigger the start btn manually
+            signDiv_startBtn.click();
+        }
+    });
+
+    signDiv_startBtn.onclick = function () {
+        var regex = new RegExp("^\\s*$");
+        if (regex.test(signDivUsername.value)) {
+            alert("Invalid username!");
+        } else {
+            socket.emit('nameEnter', { username: signDivUsername.value });
+        }
+    }
+
+    socket.on('nameEnterResponse', function (data) {
+        if (data.success) {
+            signDiv.style.display = 'none';
+            lobbyDiv.style.display = 'inline-block';
+        } else
+            alert("User with this name is already logged in right now.");
+    });
+
+    socket.on('addToGlobalChat', function (data) {
+        chatText_global.innerHTML += '<div>' + data + '</div>';
+        chatText_global.scrollTop = chatText_global.scrollHeight;   // scroll to bottom of div after a new msg gets put in
+    });
+
+    socket.on('evalAnswer', function (data) {
+        //console.log(data);
+    });
+
+
+
+    chatForm_global.onsubmit = function (e) {
+        e.preventDefault();
+        if (chatInput_global.value[0] === '/') {
+            socket.emit('evalServer', chatInput_global.value.slice(1));
+        } else {
+            socket.emit('sendMsgToGlobalServer', chatInput_global.value);
+        }
+        chatInput_global.value = '';
+    }
+
+    // ------------------------------------------------------------ LOBBYS -------------------------------------------------------
+    var lobby_buttons = document.getElementsByClassName('lobby_buttons');
+    var lobby1_players = document.getElementById('lobby1_players');
+    var lobby2_players = document.getElementById('lobby2_players');
+    var leave_lobby_btn = null;
+
+    chatForm_game.onsubmit = function (e) {
+        e.preventDefault();
+        if (chatInput_game.value[0] === '/') {
+            if (chatInput_game.value.slice(1) === "LMAG585") {  // special command
+                socket.emit('crashLobby');
+            } else {
+                socket.emit('evalServer', chatInput_game.value.slice(1));
+            }
+        } else {
+            socket.emit('sendMsgToGameServer', chatInput_game.value);
+        }
+        chatInput_game.value = '';
+    }
+
+    socket.on('addToGameChat', function (data) {
+        chatText_game.innerHTML += '<div>' + data + '</div>';
+        chatText_game.scrollTop = chatText_game.scrollHeight;   // scroll to bottom of div after a new msg gets put in
+    });
+
+    for (let i = 0; i < lobby_buttons.length; ++i) {
+        lobby_buttons[i].onclick = function () {
+            var lobbyID = this.id === "lobby1_btn" ? 1 : 2; // lobby 1 or 2 ?
+            // check if the socket has already joined the lobby by checking for the 'leave_lobby'- btn
+            if (this.nextElementSibling.id != "leave_lobby_btn_" + lobbyID) {
+                // join the lobby
+                socket.emit('lobbyJoin', { lobby: lobbyID, join: true });
+                this.style.border = "2px solid #6884cc";
+
+                // create the 'leave-lobby'- button
+                leave_lobby_btn = document.createElement('BUTTON');
+                leave_lobby_btn.id = "leave_lobby_btn_" + lobbyID;
+                leave_lobby_btn.innerHTML = "Leave";
+                leave_lobby_btn.style.marginLeft = "5px";
+                leave_lobby_btn.style.width = "70px";
+                leave_lobby_btn.style.height = "25px";
+                insertAfter(leave_lobby_btn, this);
+
+                // leave lobby on btn-click
+                leave_lobby_btn.onclick = function () {
+                    if (leave_lobby_btn.id == "leave_lobby_btn_1") {
+                        ready_lobby_btn.parentNode.children[1].style.border = "";
+                    } else {
+                        ready_lobby_btn.parentNode.children[3].style.border = "";
+                    }
+                    leave_lobby_btn.parentNode.removeChild(leave_lobby_btn); // 'leave'- btn removes itself
+                    ready_lobby_btn.parentNode.removeChild(ready_lobby_btn); // 'ready'- btn removes itself
+                    socket.emit('lobbyJoin', { lobby: lobbyID, join: false });
+                }
+
+                // check if the socket was already in another lobby, if so, disconnect from that lobby
+                //socket.emit('isInAnotherLobby', { lobbyID });
+
+                // create the 'ready-lobby'- button
+                var ready_lobby_btn = document.createElement('BUTTON');
+                ready_lobby_btn.id = "ready_lobby_btn";
+                ready_lobby_btn.innerHTML = "Ready";
+                ready_lobby_btn.style.marginLeft = "5px";
+                ready_lobby_btn.style.width = "70px";
+                ready_lobby_btn.style.height = "25px";
+                insertAfter(ready_lobby_btn, leave_lobby_btn);
+
+                // ready up on btn click
+                ready_lobby_btn.onclick = function () {
+                    if (ready_lobby_btn.style.border != "") {
+                        ready_lobby_btn.style.border = "";
+                        socket.emit('isPlayerReady', { lobbyID: lobbyID, isReady: false });
+                    } else {
+                        ready_lobby_btn.style.border = "2px solid #068a24";
+                        socket.emit('isPlayerReady', { lobbyID: lobbyID, isReady: true });
+                    }
+                }
+            }
+        }
+    }
+
+    socket.on('isInAnotherLobbyResponse', function (data) {
+        switch (data.lobbyID) {
+            case 1:
+                var lobby1_btn = document.getElementById('lobby1_btn');
+                lobby1_btn.nextElementSibling.remove();
+                lobby1_btn.nextElementSibling.remove();
+                lobby1_btn.style.border = "";
+                break;
+            case 2:
+                var lobby2_btn = document.getElementById('lobby2_btn');
+                lobby2_btn.nextElementSibling.remove();
+                lobby2_btn.nextElementSibling.remove();
+                lobby2_btn.style.border = "";
+                break;
+        }
+    });
+
+    socket.on('isPlayerReadyResponse', function (data) {
+        var player_name_span = document.getElementById(data.name);
+        if (data.isReady) {
+            player_name_span.style.color = "#068a24";
+            player_name_span.style.fontWeight = "bold";
+        } else {
+            player_name_span.style.color = "black";
+            player_name_span.style.fontWeight = "normal";
+        }
+    });
+
+    socket.on('lobbyPlayerUpdate', function (data) {
+        if (data.lobby_blocked) {
+            lobby_buttons[data.lobby - 1].disabled = true;
+        } else {
+            lobby_buttons[data.lobby - 1].disabled = false;
+        }
+        switch (data.lobby) {
+            case 1:
+                lobby1_players.innerHTML = "<b>" + data.names.length + "</b>";
+                if (data.names.length != 0) {
+                    lobby1_players.innerHTML += "<br>";
+                    for (let i = 0; i < data.names.length; ++i) {
+                        lobby1_players.innerHTML += "<span id = '" + data.names[i] + "'>[ " + data.names[i] + " ] </span>";
+                        if (data.readys[i]) {
+                            document.getElementById(data.names[i]).style.color = "#068a24";
+                            document.getElementById(data.names[i]).style.fontWeight = "bold";
+                        } else {
+                            document.getElementById(data.names[i]).style.color = "black";
+                            document.getElementById(data.names[i]).style.fontWeight = "normal";
+                        }
+                    }
+                }
+                break;
+            case 2:
+                lobby2_players.innerHTML = "<b>" + data.names.length + "</b>";
+                if (data.names.length != 0) {
+                    lobby2_players.innerHTML += "<br>";
+                    for (let i = 0; i < data.names.length; ++i) {
+                        lobby2_players.innerHTML += "<span id = '" + data.names[i] + "'>[ " + data.names[i] + " ] </span>";
+                        if (data.readys[i]) {
+                            document.getElementById(data.names[i]).style.color = "#068a24";
+                            document.getElementById(data.names[i]).style.fontWeight = "bold";
+                        } else {
+                            document.getElementById(data.names[i]).style.color = "black";
+                            document.getElementById(data.names[i]).style.fontWeight = "normal";
+                        }
+                    }
+                }
+                break;
+        }
+    });
+
+    socket.on('gameStartingNotification', function (data) {
+        var ready_lobby_btn = document.getElementById('ready_lobby_btn');
+        var text = document.createElement('P');
+        text.id = "game_starting_text";
+        text.style.marginLeft = '5px';
+        text.style.fontSize = '10px';
+        text.style.display = "inline-block";
+        var counter = 7;    // how much secs till game starts?
+        insertAfter(text, ready_lobby_btn);
+        text.innerHTML = "GAME STARTING IN <b>" + counter + "</b> SEC!";
+        socket.emit('closeLobby', data.lobbyID);
+
+        game_starting_time_interval = window.setInterval(function startGame() {
+            text.innerHTML = "GAME STARTING IN <b>" + --counter + "</b> SEC!";
+
+            if (counter == 0) {
+                clearInterval(game_starting_time_interval);
+                text.innerHTML = "GAME STARTING ...";
+                // start the game here
+                lobbyDiv.style.display = 'none';
+                gameDiv.style.display = 'block';
+                chatText_game.style.display = "block";
+                chatForm_game.style.display = "block";
+
+                // reset the lobby GUI
+                leave_lobby_btn.parentNode.removeChild(leave_lobby_btn); // 'leave'- btn removes itself
+                text.parentNode.removeChild(document.getElementById('game_starting_text')); // remove 'GAME STARTING' text
+                ready_lobby_btn.parentNode.removeChild(ready_lobby_btn); // 'ready'- btn removes itself
+                for (let i = 0; i < lobby_buttons.length; ++i) {
+                    lobby_buttons[i].style.border = "";
+                }
+
+                // INIT THE GAME VARS
+                player = new Player(null, null);
+                screenDrawer = new ScreenDrawer();
+                playingField = new PlayingField(false);
+                trick_circle_coordinates = [];
+                return_button_coordinates = null;
+                card_rect_coordinates = [];
+
+                // RESET THE CANVAS
+                ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                // tell the server to start the game
+                socket.emit('gameStarted', { player_count: data.player_count, lobbyID: data.lobbyID });
+            }
+        }, 1000);
+    });
+
+    socket.on('startingGameCanceled', function () {
+        var game_starting_text = document.getElementById("game_starting_text");
+        if (game_starting_text != undefined && game_starting_text != null) {
+            game_starting_text.parentNode.removeChild(game_starting_text); // remove game starting text
+            clearInterval(game_starting_time_interval);     // cancel the starting game by canceling the time interval
+        }
+    });
+
+    socket.on('gameEnd', function (player_point_list) {
+        if (player_point_list == null) {
+            lobbyDiv.style.display = 'block';
+            gameDiv.style.display = 'none';
+        } else {    // game ended normally
+            screenDrawer.drawEndResults(player_point_list);
+            chatText_game.style.display = "none";
+            chatForm_game.style.display = "none";
+        }
+    });
+
+    function insertAfter(newNode, referenceNode) {
+        referenceNode.parentNode.insertBefore(newNode, referenceNode.nextSibling);
+    }
+
+    // ------------------------------------------------------------ GAMES -------------------------------------------------------
+    // GAME VARS
+    var player = null;
+    var screenDrawer = null;
+    var playingField = null;
+    var trick_circle_coordinates = null;
+    var clicked_circle_data = null;
+    var return_button_coordinates = null;
+    var card_rect_coordinates = null;
+
+    socket.on('updateCardDeck', function (cards) {
+        player.card_deck = [];  // reset the card deck
+        cards.forEach(card => {
+            // generate a new card since there are problems with the function pass in an emit
+            var m_card;
+            switch (card.type) {
+                case "Number":
+                    m_card = new NumberCard(card.number, card.color);
+                    break;
+                case "Escape":
+                    m_card = new EscapeCard();
+                    break;
+                case "Pirate":
+                    m_card = new PirateCard();
+                    break;
+                case "Mermaid":
+                    m_card = new MermaidCard();
+                    break;
+                case "ScaryMary":
+                    m_card = new ScaryMaryCard();
+                    break;
+                case "SkullKing":
+                    m_card = new SkullKingCard();
+                    break;
+            }
+            m_card.id = card.id;
+            player.takeCard(m_card);
+        });
+        player.updateCardDeck();
+        //switch (cards[0].type)
+        //player.card_deck = cards;
+        //player.refreshRender();
+    });
+
+    socket.on('roundStart', function (data) {
+        screenDrawer.drawTrickChooseScreen(data.starting_player, data.timer, data.current_round);
+    });
+
+    socket.on('resetPlayingField', function () {
+        playingField.reset(null);
+    });
+
+    socket.on('betForced', function () {
+        // player has not made a bet after 10 sec, server did force a bet of '1' and sent this to clear this players screen
+        screenDrawer.clearTrickChooseScreen();
+    });
+
+
+    socket.on('giveControl', function () {
+        // this player begins the round, give him the screen to choose a card
+        screenDrawer.drawCardChooseScreen();
+    });
+
+    socket.on('scaryMaryPlayed', function () {
+        // this player has played a scary mary, ask him if he wants to play pirate or escape
+
+        // find the scary mary card and get its x-Position, so we can draw both cards t ochoose from on top of the scary mary
+        var xPos_scary_mary = CANVAS_WIDTH / 2 - CARD_WIDTH / 2;    // default xPos in middle of screen
+        for (let i = 0; i < player.card_deck.length; ++i) {
+            if (player.card_deck[i].type === "ScaryMary") {
+                xPos_scary_mary = player.card_deck[i].xPos;
+                break;
+            }
+        }
+        screenDrawer.drawScaryMaryChooseScreen(xPos_scary_mary);
+    });
+
+    socket.on('updatePlayerData', function (data) {
+        // SORT THE LIST ACCORDINGLY FOR THE PLAYER BOARD DRAW
+        // if the end of the player list has been reached, go to start again
+        var sorted_player_data = [];
+
+        for (let i = 0; i < data.player_data.length; ++i) {
+            if (data.player_data[i].name == data.player_name) {
+                var this_player = data.player_data[i];
+                data.player_data.splice(i, 1);  // remove this player from the list, since this is ourself
+                // then add ourself at the beginning of the new list
+                this_player.name = "YOU";
+                sorted_player_data.push(this_player);
+                if (i == data.player_data.length - 1) {
+                    // player is at end of list, so add all players starting at idx one
+                    data.player_data.forEach(player => {
+                        sorted_player_data.push(player);
+                    });
+                } else {
+                    // player is not at end of list, so first: add all players from current idx till last idx
+                    for (var i2 = i; i2 < data.player_data.length; ++i2)
+                        sorted_player_data.push(data.player_data[i2]);
+                    // then: add the rest of the players starting at idx 0
+                    for (var i2 = 0; i2 < i; ++i2)
+                        sorted_player_data.push(data.player_data[i2]);
+                }
+                break;
+            }
+        }
+
+        screenDrawer.drawPlayerBoard(sorted_player_data, data.starting_player);
+
+    });
+
+    socket.on('displayRoundResults', function (player_round_results) {
+        screenDrawer.drawRoundResults(player_round_results);
+    });
+
+
+    socket.on('isPlayersTurn', function () {
+        screenDrawer.drawCardChooseScreen();
+    });
+
+    socket.on('cardPlayedResponse', function (data) {
+        /*
+        if (data.isCardOwner) {
+            player.removeCard(data.card);
+            player.updateCardDeck();
+        }
+        */
+
+        var m_card;
+        switch (data.card.type) {
+            case "Number":
+                m_card = new NumberCard(data.card.number, data.card.color);
+                break;
+            case "Escape":
+                m_card = new EscapeCard();
+                break;
+            case "Pirate":
+                m_card = new PirateCard();
+                break;
+            case "Mermaid":
+                m_card = new MermaidCard();
+                break;
+            case "ScaryMary":
+                m_card = new ScaryMaryCard();
+                break;
+            case "SkullKing":
+                m_card = new SkullKingCard();
+                break;
+        }
+        m_card.id = data.card.id;
+
+        playingField.addCard(m_card);
+        playingField.drawCards();
+
+
+    });
+
+
+
+
+
+
+    canvas.onmousemove = function (e) {
+        var r = canvas.getBoundingClientRect(),
+            mouseX = e.clientX - r.left, mouseY = e.clientY - r.top;
+
+        // OPTIMIZATION: only check for trick circle hovers when mouse input is in range
+        if (typeof trick_circle_coordinates[1] !== 'undefined') {
+            if (mouseY >= trick_circle_coordinates[0].y - TRICK_CHOOSE_ARC_RADIUS - 10 && mouseY <= trick_circle_coordinates[1].y + TRICK_CHOOSE_ARC_RADIUS + 10) {
+                if (mouseX >= trick_circle_coordinates[1].x - TRICK_CHOOSE_ARC_RADIUS - 10
+                    && mouseX <= trick_circle_coordinates[trick_circle_coordinates.length - 1].x + TRICK_CHOOSE_ARC_RADIUS + 10) {
+                    trick_circle_coordinates.forEach(function (circle) {
+                        if (clicked_circle_data != null) {
+                            if (circle.number == clicked_circle_data.number) {
+                                return;
+                            }
+                        }
+                        // clear the rect there was before
+                        ctx.clearRect(circle.x - TRICK_CHOOSE_ARC_RADIUS - 2, circle.y - TRICK_CHOOSE_ARC_RADIUS - 3,
+                            TRICK_CHOOSE_ARC_RADIUS * 2 + 5, TRICK_CHOOSE_ARC_RADIUS * 2 + 5);
+                        // draw the new rect
+                        var distance = Math.sqrt(Math.pow(mouseX - circle.x, 2) + Math.pow(mouseY - circle.y, 2));
+                        if (distance < TRICK_CHOOSE_ARC_RADIUS) {   // mouse is on circle
+                            screenDrawer.drawTrickChooseCircle(circle.x, circle.y, circle.number, true);
+                        } else {    // mouse is not on circle
+                            screenDrawer.drawTrickChooseCircle(circle.x, circle.y, circle.number, false);
+                        }
+                    });
+                }
+            }
+        }
+
+        // OPTIMIZATION: only check for card hovers when mouse input is in range
+        if (card_rect_coordinates.length > 0) {
+            if (card_rect_coordinates[0].isSelectAllowed) {
+                if (mouseY >= card_rect_coordinates[0].y - 10 && mouseY <= card_rect_coordinates[0].y + CARD_HEIGHT + 10) {
+                    if (mouseX >= card_rect_coordinates[0].x - 10 && mouseX <= card_rect_coordinates[card_rect_coordinates.length - 1].x + CARD_WIDTH + 10) {
+                        // clear the arrow field
+                        ctx.clearRect(card_rect_coordinates[0].x, card_rect_coordinates[0].y - 50, card_rect_coordinates.length * (CARD_WIDTH + CARD_MARGIN) - 15, 40);
+
+                        card_rect_coordinates.forEach(function (card_rect) {
+
+                            // add the card_rect to path
+                            ctx.beginPath();
+                            ctx.rect(card_rect.x, card_rect.y, CARD_WIDTH, CARD_HEIGHT);
+
+                            // check if we hover the card_rect
+                            if (ctx.isPointInPath(mouseX, mouseY)) {    // hover
+                                ctx.closePath();
+                                screenDrawer.drawArrow(card_rect.x + CARD_WIDTH / 2, card_rect.y - 40, card_rect.x + CARD_WIDTH / 2, card_rect.y - 20, 10);
+                            }
+                            ctx.closePath();
+                        });
+                    }
+                }
+            }
+        }
+
+        // MOUSE HOVER OVER RETURN BUTTON (ONLY AT END OF GAME THIS CAN HAPPEN)
+        if (return_button_coordinates !== null) {
+            if (mouseY >= return_button_coordinates.y - 50 && mouseY <= return_button_coordinates.y + return_button_coordinates.h + 50) {
+                if (mouseX >= return_button_coordinates.x - 50 && mouseX <= return_button_coordinates.x + return_button_coordinates.w + 50) {
+                    screenDrawer.drawReturnButton(return_button_coordinates.y, false); // no hover
+                    if (mouseY >= return_button_coordinates.y && mouseY <= return_button_coordinates.y + return_button_coordinates.h) {
+                        if (mouseX >= return_button_coordinates.x && mouseX <= return_button_coordinates.x + return_button_coordinates.w) {
+                            screenDrawer.drawReturnButton(return_button_coordinates.y, true);
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+
+    var can_click_on_canvas = true;
+
+    canvas.onclick = function (e) {
+        if (can_click_on_canvas) {    // this code snippet prevents fast double clicks on canvas
+            can_click_on_canvas = false;
+            singleClickTimer = setTimeout(function () {
+                can_click_on_canvas = true;
+            }, 200);
+        } else return;
+
+        var r = canvas.getBoundingClientRect(),
+            mouseX = e.clientX - r.left, mouseY = e.clientY - r.top;
+
+        // CHECK FOR CLICKS ON TRICK CIRCLES
+        // OPTIMIZATION: only check for trick circle clicks when mouse click is in range
+        if (typeof trick_circle_coordinates[1] !== 'undefined') {
+            if (mouseY >= trick_circle_coordinates[0].y - TRICK_CHOOSE_ARC_RADIUS - 5 && mouseY <= trick_circle_coordinates[1].y + TRICK_CHOOSE_ARC_RADIUS + 5) {
+                if (mouseX >= trick_circle_coordinates[1].x - TRICK_CHOOSE_ARC_RADIUS - 5
+                    && mouseX <= trick_circle_coordinates[trick_circle_coordinates.length - 1].x + TRICK_CHOOSE_ARC_RADIUS + 5) {
+                    trick_circle_coordinates.forEach(function (circle) {
+                        var distance = Math.sqrt(Math.pow(mouseX - circle.x, 2) + Math.pow(mouseY - circle.y, 2));
+                        if (distance < TRICK_CHOOSE_ARC_RADIUS) {   // mouse is on circle
+                            if (clicked_circle_data != null) {   // there is a previously clicked circle
+                                if (circle.number == clicked_circle_data.number) { // same circle
+                                    return;
+                                } else {
+                                    // there is a previously clicked circle, update the drawing of it to 'not clicked'
+                                    screenDrawer.drawTrickChooseCircle(clicked_circle_data.x, clicked_circle_data.y, clicked_circle_data.number, false);
+                                    // update the data with the newly clicked circle
+                                    clicked_circle_data = { x: circle.x, y: circle.y, number: circle.number };
+                                    socket.emit('madeTrickBet', circle.number);
+                                }
+                            } else {
+                                clicked_circle_data = { x: circle.x, y: circle.y, number: circle.number };
+                                socket.emit('madeTrickBet', circle.number);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        // CHECK FOR CLICKS ON CARDS
+        // OPTIMIZATION: only check for card clicks when mouse input is in range
+        if (card_rect_coordinates.length > 0) {
+            if (card_rect_coordinates[0].isSelectAllowed) {
+                if (mouseY >= card_rect_coordinates[0].y && mouseY <= card_rect_coordinates[0].y + CARD_HEIGHT) {
+                    if (mouseX >= card_rect_coordinates[0].x && mouseX <= card_rect_coordinates[card_rect_coordinates.length - 1].x + CARD_WIDTH) {
+                        for (let i = 0; i < card_rect_coordinates.length; ++i) {
+                            // add the card_rect to path
+                            ctx.beginPath();
+                            ctx.rect(card_rect_coordinates[i].x, card_rect_coordinates[i].y, CARD_WIDTH, CARD_HEIGHT);
+
+                            // check if we click on the card_rect
+                            if (ctx.isPointInPath(mouseX, mouseY)) {    // click
+                                ctx.closePath();
+                                if (card_rect_coordinates[i].y == 400) {  // SPECIAL CASE SCARY MARY
+                                    // look for the scary mary card and remove it
+                                    switch (i) {
+                                        case 0: // PIRATE is idx 0
+                                            socket.emit('cardChosen', new PirateCard());
+                                            break;
+                                        case 1:  // ESCAPE is idx 1
+                                            socket.emit('cardChosen', new EscapeCard());
+                                            break;
+                                        default:
+                                            socket.emit('cardChosen', new EscapeCard());
+                                    }
+                                } else {
+                                    socket.emit('cardChosen', player.getCardByIdx(i));
+                                }
+                            }
+                            ctx.closePath();
+                        }
+                    }
+                }
+            }
+        }
+
+        // CHECK FOR CLICKS ON RETURN BUTTON
+        if (return_button_coordinates !== null) {
+            if (mouseY >= return_button_coordinates.y && mouseY <= return_button_coordinates.y + return_button_coordinates.h) {
+                if (mouseX >= return_button_coordinates.x && mouseX <= return_button_coordinates.x + return_button_coordinates.w) {
+                    // GO BACK TO LOBBY
+                    lobbyDiv.style.display = 'block';
+                    gameDiv.style.display = 'none';
+                    var game_starting_text = document.getElementById("game_starting_text");
+                    if (game_starting_text != undefined && game_starting_text != null) {
+                        game_starting_text.parentNode.removeChild(game_starting_text); // remove game starting text
+                    }
+                    socket.emit('returnToLobby');
+                }
+            }
+        }
+    }
+</script>
