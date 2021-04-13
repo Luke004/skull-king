@@ -268,15 +268,8 @@ PlayingField = function (isServer) {
     }
 
     self.addCard = function (card) {
-        if (isServer) {
-            self.played_cards.forEach(m_card => {
-                if (card.id == m_card.id) return true;  // return true if card already exists in deck
-            });
-        }
-
         self.played_cards.push(card);
         self.updateHighestCard(card);
-        return false;
     }
 
     self.addPlayerID = function (id) {

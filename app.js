@@ -297,8 +297,7 @@ io.sockets.on('connection', function (socket) {
 
         if (isCardAllowed(card, PLAYER_LIST[socket.id])) {
             GAME_INSTANCES[lobbyID].playingField.addPlayerID(socket.id);
-            let card_already_exists = GAME_INSTANCES[lobbyID].playingField.addCard(card);   // add the card and the id of its player to the playing_field
-            if (card_already_exists) return;
+            GAME_INSTANCES[lobbyID].playingField.addCard(card);   // add the card and the id of its player to the playing field
 
             // remove the card from the player's deck
             player.removeCardByID(card.id);

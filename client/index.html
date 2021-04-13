@@ -376,9 +376,6 @@
             player.takeCard(m_card);
         });
         player.updateCardDeck();
-        //switch (cards[0].type)
-        //player.card_deck = cards;
-        //player.refreshRender();
     });
 
     socket.on('roundStart', function (data) {
@@ -398,6 +395,7 @@
     socket.on('giveControl', function () {
         // this player begins the round, give him the screen to choose a card
         screenDrawer.drawCardChooseScreen();
+        can_choose_card = true;
     });
 
     socket.on('scaryMaryPlayed', function () {
@@ -454,16 +452,10 @@
 
     socket.on('isPlayersTurn', function () {
         screenDrawer.drawCardChooseScreen();
+        can_choose_card = true;
     });
 
     socket.on('cardPlayedResponse', function (data) {
-        /*
-        if (data.isCardOwner) {
-            player.removeCard(data.card);
-            player.updateCardDeck();
-        }
-        */
-
         var m_card;
         switch (data.card.type) {
             case "Number":
@@ -489,12 +481,7 @@
 
         playingField.addCard(m_card);
         playingField.drawCards();
-
-
     });
-
-
-
 
 
 
@@ -570,6 +557,7 @@
 
     }
 
+    var can_choose_card = false;
     var can_click_on_canvas = true;
 
     canvas.onclick = function (e) {
@@ -577,7 +565,7 @@
             can_click_on_canvas = false;
             singleClickTimer = setTimeout(function () {
                 can_click_on_canvas = true;
-            }, 200);
+            }, 500);
         } else return;
 
         var r = canvas.getBoundingClientRect(),
@@ -625,6 +613,8 @@
 
                             // check if we click on the card_rect
                             if (ctx.isPointInPath(mouseX, mouseY)) {    // click
+                                if (!can_choose_card) return;   // prevent double card chose
+                                can_choose_card = false;
                                 ctx.closePath();
                                 if (card_rect_coordinates[i].y == 400) {  // SPECIAL CASE SCARY MARY
                                     // look for the scary mary card and remove it
